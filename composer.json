@@ -1,0 +1,28 @@
+{
+    "name": "idcgames/ui",
+    "description": "Shared UI package for IDCGames services — NavBar, Footer, Layout, Auth",
+    "type": "library",
+    "version": "1.0.0",
+    "license": "proprietary",
+    "autoload": {
+        "psr-4": {
+            "IDCGames\\UI\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "IDCGames\\UI\\IDCGamesUIServiceProvider"
+            ],
+            "aliases": {}
+        }
+    },
+    "require": {
+        "php": "^8.2",
+        "illuminate/support": "^12.0",
+        "illuminate/http": "^12.0",
+        "illuminate/view": "^12.0"
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

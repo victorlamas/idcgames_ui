@@ -1,0 +1,18 @@
+{
+    "name": "@idcgames/ui",
+    "version": "1.0.0",
+    "description": "Shared Vue components for IDCGames Extra projects",
+    "type": "module",
+    "exports": {
+        "./IDCNavbar.vue": "./resources/js/components/IDCNavbar.vue",
+        "./IDCFooter.vue": "./resources/js/components/IDCFooter.vue"
+    },
+    "files": [
+        "resources/js/components"
+    ],
+    "peerDependencies": {
+        "vue": "^3.4",
+        "vue-i18n": "^9.0",
+        "@inertiajs/vue3": "^1.0"
+    }
+}
