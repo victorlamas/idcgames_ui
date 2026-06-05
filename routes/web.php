@@ -52,10 +52,18 @@ Route::middleware('web')->group(function () {
         };
     };
 
-    // /idc-auth/api/web/login  →  auth.idcgames.com/api/web/login
+    // /idc-auth/api/web/login  →  proxy a auth.idcgames.com/api/web/login (AJAX — necesita CORS)
     Route::any('/idc-auth/{path}', $makeProxy())->where('path', '.*');
-    // /social/login/GP         →  auth.idcgames.com/social/login/GP
-    Route::any('/social/{path}',   $makeProxy('social'))->where('path', '.*');
+
+    // /social/login/GP  →  redirect DIRECTO a auth.idcgames.com/social/login/GP
+    // NO se proxea: el OAuth necesita la sesión de auth.idcgames.com en el browser.
+    // El proxy rompería el state de OAuth (el PHPSESSID no llegaría al browser).
+    Route::any('/social/{path}', function (string $path) {
+        $target = config('services.idc_auth.url', 'https://auth.idcgames.com');
+        $url    = rtrim($target, '/') . '/social/' . $path
+                . (request()->getQueryString() ? '?' . request()->getQueryString() : '');
+        return redirect($url);
+    })->where('path', '.*');
 });
 
 Route::middleware('web')->group(function () {
