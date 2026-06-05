@@ -26,32 +26,36 @@ if (app()->environment(['local', 'development', 'testing'])) {
 // IDC_AUTH_URL        = https://auth.idcgames.com  (en .env de cada proyecto)
 // IDC_AUTH_PUBLIC_URL = https://{proyecto}.idcgames.com/idc-auth
 Route::middleware('web')->group(function () {
-    $authProxy = function (string $path) {
+    $makeProxy = function (string $prefix = '') {
         $target = config('services.idc_auth.url', 'https://auth.idcgames.com');
-        $url    = rtrim($target, '/') . '/' . $path
-                . (request()->getQueryString() ? '?' . request()->getQueryString() : '');
+        return function (string $path) use ($target, $prefix) {
+            $url = rtrim($target, '/') . '/' . ltrim($prefix . '/' . $path, '/')
+                 . (request()->getQueryString() ? '?' . request()->getQueryString() : '');
 
-        $response = \Illuminate\Support\Facades\Http::withHeaders(
-            collect(request()->headers->all())
-                ->except(['host', 'content-length', 'origin', 'referer'])
-                ->map(fn($v) => $v[0])
-                ->toArray()
-        )->withOptions(['verify' => false, 'allow_redirects' => false, 'timeout' => 30])
-         ->send(request()->method(), $url, ['body' => request()->getContent()]);
-
-        return response($response->body(), $response->status())
-            ->header('Access-Control-Allow-Origin', request()->header('Origin', '*'))
-            ->header('Access-Control-Allow-Credentials', 'true')
-            ->withHeaders(
-                collect($response->headers())
-                    ->except(['set-cookie', 'transfer-encoding'])
-                    ->map(fn($v) => is_array($v) ? $v[0] : $v)
+            $response = \Illuminate\Support\Facades\Http::withHeaders(
+                collect(request()->headers->all())
+                    ->except(['host', 'content-length', 'origin', 'referer'])
+                    ->map(fn($v) => $v[0])
                     ->toArray()
-            );
+            )->withOptions(['verify' => false, 'allow_redirects' => false, 'timeout' => 30])
+             ->send(request()->method(), $url, ['body' => request()->getContent()]);
+
+            return response($response->body(), $response->status())
+                ->header('Access-Control-Allow-Origin', request()->header('Origin', '*'))
+                ->header('Access-Control-Allow-Credentials', 'true')
+                ->withHeaders(
+                    collect($response->headers())
+                        ->except(['set-cookie', 'transfer-encoding'])
+                        ->map(fn($v) => is_array($v) ? $v[0] : $v)
+                        ->toArray()
+                );
+        };
     };
 
-    Route::any('/idc-auth/{path}', $authProxy)->where('path', '.*');
-    Route::any('/social/{path}',   $authProxy)->where('path', '.*');
+    // /idc-auth/api/web/login  →  auth.idcgames.com/api/web/login
+    Route::any('/idc-auth/{path}', $makeProxy())->where('path', '.*');
+    // /social/login/GP         →  auth.idcgames.com/social/login/GP
+    Route::any('/social/{path}',   $makeProxy('social'))->where('path', '.*');
 });
 
 Route::middleware('web')->group(function () {
