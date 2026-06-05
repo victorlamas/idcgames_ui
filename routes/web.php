@@ -14,11 +14,45 @@ use IDCGames\UI\Http\Controllers\PreviewController;
 */
 
 // ── UI Preview (solo entornos no-producción) ────────────────────────────
-// Acceder en cualquier proyecto hijo: http://localhost:PORT/ui-preview
 if (app()->environment(['local', 'development', 'testing'])) {
     Route::get('/ui-preview', [PreviewController::class, 'index'])
         ->name('idcgames.ui.preview');
 }
+
+// ── IDC Auth Proxy ───────────────────────────────────────────────────────
+// Proxea /idc-auth/* y /social/* al auth server para evitar CORS.
+// El browser usa forum.idcgames.com/idc-auth como base (mismo origen).
+// El callback OAuth (Google, etc.) va directo a auth.idcgames.com — no pasa por aquí.
+// IDC_AUTH_URL        = https://auth.idcgames.com  (en .env de cada proyecto)
+// IDC_AUTH_PUBLIC_URL = https://{proyecto}.idcgames.com/idc-auth
+Route::middleware('web')->group(function () {
+    $authProxy = function (string $path) {
+        $target = config('services.idc_auth.url', 'https://auth.idcgames.com');
+        $url    = rtrim($target, '/') . '/' . $path
+                . (request()->getQueryString() ? '?' . request()->getQueryString() : '');
+
+        $response = \Illuminate\Support\Facades\Http::withHeaders(
+            collect(request()->headers->all())
+                ->except(['host', 'content-length', 'origin', 'referer'])
+                ->map(fn($v) => $v[0])
+                ->toArray()
+        )->withOptions(['verify' => false, 'allow_redirects' => false, 'timeout' => 30])
+         ->send(request()->method(), $url, ['body' => request()->getContent()]);
+
+        return response($response->body(), $response->status())
+            ->header('Access-Control-Allow-Origin', request()->header('Origin', '*'))
+            ->header('Access-Control-Allow-Credentials', 'true')
+            ->withHeaders(
+                collect($response->headers())
+                    ->except(['set-cookie', 'transfer-encoding'])
+                    ->map(fn($v) => is_array($v) ? $v[0] : $v)
+                    ->toArray()
+            );
+    };
+
+    Route::any('/idc-auth/{path}', $authProxy)->where('path', '.*');
+    Route::any('/social/{path}',   $authProxy)->where('path', '.*');
+});
 
 Route::middleware('web')->group(function () {
 

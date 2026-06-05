@@ -54,6 +54,13 @@ class IdcSsoAutoLogin
         $useridc  = (string) $useridc;
         $nickname = urldecode((string) $nickname);
 
+        // ── Validar idc_token contra la API central IDC ────────
+        // Sin esta verificación, cualquier cookie forjada daría acceso.
+        if (! $idcToken || ! $this->verifyTokenWithApi((string) $idcToken, $useridc)) {
+            Log::warning("[IDCGames SSO] Cookie token failed API verification for useridc={$useridc}");
+            return $next($request);
+        }
+
         try {
             $userModel = config('auth.providers.users.model', \App\Models\User::class);
 
@@ -62,22 +69,20 @@ class IdcSsoAutoLogin
 
             if (! $user) {
                 // ── Crear usuario automáticamente ─────────────
-                // El proyecto hijo puede escuchar el evento Registered si necesita
-                // hacer trabajo adicional (crear perfil gamer, etc.)
                 $user = $userModel::create([
                     'useridc'   => $useridc,
                     'username'  => $nickname,
                     'nickname'  => $nickname,
                     'name'      => $nickname,
-                    'email'     => null,          // se rellena luego desde IDC API
-                    'password'  => bcrypt(str()->random(32)),  // contraseña aleatoria
+                    'email'     => null,
+                    'password'  => bcrypt(str()->random(32)),
                     'idc_token' => $idcToken,
                 ]);
 
                 Log::info("[IDCGames SSO] Created new user from cookies: useridc={$useridc}, nick={$nickname}");
             } else {
                 // ── Actualizar token si cambió ─────────────────
-                if ($idcToken && $user->idc_token !== $idcToken) {
+                if ($user->idc_token !== $idcToken) {
                     $user->idc_token = $idcToken;
                     $user->save();
                 }
@@ -95,5 +100,46 @@ class IdcSsoAutoLogin
         }
 
         return $next($request);
+    }
+
+    /**
+     * Verifica el idc_token contra la API central de IDC.
+     * Devuelve true solo si el token es válido y pertenece al useridc dado.
+     * Se cachea 5 minutos para no golpear la API en cada request.
+     */
+    private function verifyTokenWithApi(string $token, string $useridc): bool
+    {
+        $cacheKey = 'idc_sso_token_' . sha1($token);
+
+        return \Illuminate\Support\Facades\Cache::remember($cacheKey, 300, function () use ($token, $useridc) {
+            $url = config('idcgames-ui.idc_api.unilogin_url') . '?token=' . urlencode($token);
+
+            try {
+                $curl = curl_init();
+                curl_setopt_array($curl, [
+                    CURLOPT_URL            => $url,
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_TIMEOUT        => 5,
+                    CURLOPT_HTTPHEADER     => ['accept: */*'],
+                ]);
+                $response = curl_exec($curl);
+                curl_close($curl);
+
+                if (! $response) {
+                    return false;
+                }
+
+                $data = json_decode($response);
+
+                // La API IDC devuelve el iIDUsuario del token
+                $apiUserId = $data->content->iIDUsuario ?? $data->iIDUsuario ?? null;
+
+                return $apiUserId && (string) $apiUserId === $useridc;
+
+            } catch (\Throwable $e) {
+                Log::warning('[IDCGames SSO] Token API verification failed: ' . $e->getMessage());
+                return false;
+            }
+        });
     }
 }
