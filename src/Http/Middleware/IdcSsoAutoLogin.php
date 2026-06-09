@@ -103,21 +103,60 @@ class IdcSsoAutoLogin
     }
 
     /**
-     * Verifica el idc_token contra la API central de IDC.
-     * Devuelve true solo si el token es válido y pertenece al useridc dado.
-     * Se cachea 5 minutos para no golpear la API en cada request.
+     * Verifica el idc_token contra auth.idcgames.com (POST /api/web/verify-legacy-token).
+     * Cacheado 5 minutos para no golpear el servicio en cada request.
+     *
+     * Fallback automático a unilogin/SoloLoginJuegoUnico.php si el auth service
+     * no está disponible (timeout / 5xx), para no romper el SSO durante la migración.
      */
     private function verifyTokenWithApi(string $token, string $useridc): bool
     {
         $cacheKey = 'idc_sso_token_' . sha1($token);
 
         return \Illuminate\Support\Facades\Cache::remember($cacheKey, 300, function () use ($token, $useridc) {
-            $url = config('idcgames-ui.idc_api.unilogin_url') . '?token=' . urlencode($token);
+            // ── Primary: auth.idcgames.com ─────────────────────
+            $authBase = rtrim((string) config('idcgames-ui.idc_api.auth_url', ''), '/');
+            $authPath = (string) config('idcgames-ui.idc_api.verify_token_path', '/api/web/verify-legacy-token');
+
+            if ($authBase) {
+                try {
+                    $curl = curl_init();
+                    curl_setopt_array($curl, [
+                        CURLOPT_URL            => $authBase . $authPath,
+                        CURLOPT_POST           => true,
+                        CURLOPT_POSTFIELDS     => http_build_query(['token' => $token, 'useridc' => $useridc]),
+                        CURLOPT_RETURNTRANSFER => true,
+                        CURLOPT_TIMEOUT        => 5,
+                        CURLOPT_HTTPHEADER     => ['Accept: application/json', 'Content-Type: application/x-www-form-urlencoded'],
+                    ]);
+                    $response = curl_exec($curl);
+                    $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+                    $curlErr  = curl_error($curl);
+                    curl_close($curl);
+
+                    if (! $curlErr && $response && $httpCode === 200) {
+                        $data = json_decode($response, true);
+                        if (isset($data['valid']) && $data['valid'] === true) {
+                            return (string) ($data['useridc'] ?? '') === $useridc;
+                        }
+                        return false; // auth service responded but token is invalid
+                    }
+
+                    Log::warning('[IDCGames SSO] auth.idcgames.com unavailable, falling back to legacy', [
+                        'http_code' => $httpCode, 'curl_err' => $curlErr,
+                    ]);
+                } catch (\Throwable $e) {
+                    Log::warning('[IDCGames SSO] auth.idcgames.com error: ' . $e->getMessage());
+                }
+            }
+
+            // ── Fallback: legacy SoloLoginJuegoUnico.php ──────
+            $legacyUrl = config('idcgames-ui.idc_api.unilogin_url') . '?token=' . urlencode($token);
 
             try {
                 $curl = curl_init();
                 curl_setopt_array($curl, [
-                    CURLOPT_URL            => $url,
+                    CURLOPT_URL            => $legacyUrl,
                     CURLOPT_RETURNTRANSFER => true,
                     CURLOPT_TIMEOUT        => 5,
                     CURLOPT_HTTPHEADER     => ['accept: */*'],
@@ -125,19 +164,14 @@ class IdcSsoAutoLogin
                 $response = curl_exec($curl);
                 curl_close($curl);
 
-                if (! $response) {
-                    return false;
-                }
+                if (! $response) return false;
 
-                $data = json_decode($response);
-
-                // La API IDC devuelve el iIDUsuario del token
+                $data      = json_decode($response);
                 $apiUserId = $data->content->iIDUsuario ?? $data->iIDUsuario ?? null;
-
                 return $apiUserId && (string) $apiUserId === $useridc;
 
             } catch (\Throwable $e) {
-                Log::warning('[IDCGames SSO] Token API verification failed: ' . $e->getMessage());
+                Log::warning('[IDCGames SSO] Legacy token fallback failed: ' . $e->getMessage());
                 return false;
             }
         });

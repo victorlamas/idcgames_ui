@@ -12,7 +12,7 @@
                         :aria-label="s.name"
                         class="w-12 h-12 rounded-full border-2 border-idc-accent/50 flex items-center justify-center text-idc-accent hover:bg-idc-accent hover:text-black hover:border-idc-accent transition-all duration-200 hover:scale-110">
                         <span class="sr-only">{{ s.name }}</span>
-                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" v-html="s.icon" />
+                        <svg style="width:20px;height:20px;display:block;flex-shrink:0" fill="currentColor" viewBox="0 0 24 24" v-html="s.icon" />
                     </a>
                 </div>
             </div>

@@ -52,9 +52,19 @@ IDCGAMES_GIFTS_URL=https://gifts.idcgames.com
 IDCGAMES_GAMER_URL=https://gamer.idcgames.com
 IDCGAMES_FORUM_URL=https://forum.idcgames.com
 
-# API central IDC
-IDC_UNILOGIN_URL=https://en.idcgames.com/unilogin/SoloLoginJuegoUnico.php
+# Auth service IDC — valida el idc_token via POST (reemplaza SoloLoginJuegoUnico)
+IDC_AUTH_URL=https://auth.idcgames.com
+IDC_VERIFY_TOKEN_PATH=/api/web/verify-legacy-token
+
+# Legacy unilogin (fallback automático si auth service no responde, no es necesario cambiar)
+# IDC_UNILOGIN_URL=https://en.idcgames.com/unilogin/SoloLoginJuegoUnico.php
 ```
+
+> **Migración unilogin → auth service:** el middleware `IdcSsoAutoLogin` llama primero a
+> `auth.idcgames.com/api/web/verify-legacy-token` (POST con `token` y `useridc`).
+> Si el auth service no responde (timeout / 5xx), cae automáticamente al endpoint legacy
+> `SoloLoginJuegoUnico.php`, por lo que el SSO no se rompe durante la transición.
+> Una vez que el auth service esté estable, se puede eliminar la key `unilogin_url`.
 
 ### 4. Configurar Tailwind del proyecto hijo
 

@@ -37,8 +37,12 @@ return [
     */
 
     'idc_api' => [
-        'unilogin_url' => env('IDC_UNILOGIN_URL', 'https://en.idcgames.com/unilogin/SoloLoginJuegoUnico.php'),
-        'base_url'     => env('IDC_API_BASE_URL', 'https://en.idcgames.com'),
+        // Legacy endpoint — kept for fallback/reference only
+        'unilogin_url'      => env('IDC_UNILOGIN_URL', 'https://en.idcgames.com/unilogin/SoloLoginJuegoUnico.php'),
+        'base_url'          => env('IDC_API_BASE_URL', 'https://en.idcgames.com'),
+        // Auth service — server-to-server legacy token validation (replaces SoloLoginJuegoUnico)
+        'auth_url'          => env('IDC_AUTH_URL', 'https://auth.idcgames.com'),
+        'verify_token_path' => env('IDC_VERIFY_TOKEN_PATH', '/api/web/verify-legacy-token'),
     ],
 
     /*
