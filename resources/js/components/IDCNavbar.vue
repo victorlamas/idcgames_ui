@@ -1,5 +1,5 @@
 <template>
-    <nav class="fixed top-0 inset-x-0 z-50 h-16 bg-idc-surface"
+    <nav v-if="!isLauncher" class="fixed top-0 inset-x-0 z-50 h-16 bg-idc-surface"
         style="border-bottom: 2px solid #00ff7f;">
 
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between gap-3">
@@ -144,6 +144,7 @@ import { useI18n } from 'vue-i18n'
 const { t }  = useI18n()
 const page   = usePage()
 const locale = computed(() => page.props.locale ?? 'en')
+const isLauncher = computed(() => /idclauncher/i.test(navigator.userAgent))
 
 // ── IDC Auth Session ──────────────────────────────────────────────────────
 const idcSession  = ref(null)

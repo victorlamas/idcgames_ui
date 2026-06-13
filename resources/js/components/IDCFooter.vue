@@ -1,5 +1,5 @@
 <template>
-    <footer class="bg-idc-surface border-t border-idc-border mt-auto">
+    <footer v-if="!isLauncher" class="bg-idc-surface border-t border-idc-border mt-auto">
 
         <!-- Social row -->
         <div class="border-b border-idc-border py-6">
@@ -65,6 +65,8 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+const isLauncher = computed(() => /idclauncher/i.test(navigator.userAgent))
 import { computed } from 'vue'
 import { usePage } from '@inertiajs/vue3'
 import { useI18n } from 'vue-i18n'

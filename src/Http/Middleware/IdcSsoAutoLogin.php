@@ -3,177 +3,160 @@
 namespace IDCGames\UI\Http\Middleware;
 
 use Closure;
+use IDCGames\UI\Services\IdcSsoService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * IdcSsoAutoLogin — Middleware
+ * IdcSsoAutoLogin — Middleware canónico SSO para proyectos IDCGames
  *
- * Lee las cookies de sesión de IDCGames.com (dominio .idcgames.com) y
- * auto-crea/loguea al usuario en el proyecto hijo sin necesidad de
- * que el usuario rellene un formulario de login.
+ * Flujo:
+ *   1. Si el usuario ya está autenticado → pasa sin hacer nada.
+ *   2. Lee las cookies de sesión del dominio .idcgames.com (id, nick, token).
+ *   3. Valida el token contra auth.idcgames.com vía IdcSsoService (con caché 5 min).
+ *   4. Si es válido → resuelve/crea el usuario local y hace Auth::login().
+ *   5. Ejecuta el hook post-login si está configurado (ej: generar Sanctum token).
  *
- * Cookies que lee del dominio raíz:
- *   id    → useridc (ID del usuario en IDCGames.com)
- *   nick  → nickname
- *   token → idc_token (token de la API central)
+ * Registro automático en el ServiceProvider como alias 'idc.sso.auto'.
  *
- * Comportamiento:
- *   - Si el usuario ya está autenticado → pasa sin hacer nada
- *   - Si hay cookies IDC válidas → busca user por useridc, lo crea si no existe,
- *     lo autentica via Auth::login()
- *   - Si no hay cookies → pasa sin hacer nada (el usuario accede como invitado)
+ * ── Personalización por proyecto ─────────────────────────────────────────────
  *
- * Uso en rutas:
- *   Route::middleware('idc.sso.auto')->group(function () { ... });
+ * Resolver de usuario (AppServiceProvider del proyecto):
  *
- * Registro en el ServiceProvider:
- *   $this->app['router']->aliasMiddleware('idc.sso.auto', IdcSsoAutoLogin::class);
+ *   app()->singleton('idcgames.sso.resolver', fn() =>
+ *       function (array $idcData): ?\Illuminate\Database\Eloquent\Model {
+ *           // $idcData: ['useridc', 'nick', 'email', 'token']
+ *           return \App\Models\User::firstOrCreate(
+ *               ['useridc' => $idcData['useridc']],
+ *               ['username' => $idcData['nick'], ...]
+ *           );
+ *       }
+ *   );
+ *
+ * Hook post-login (para Sanctum token, cookies extra, etc.):
+ *
+ *   app()->singleton('idcgames.sso.after_login', fn() =>
+ *       function (\Illuminate\Database\Eloquent\Model $user, Request $request): void {
+ *           $token = $user->createToken('app')->plainTextToken;
+ *           $request->session()->put('sanctum_token', $token);
+ *       }
+ *   );
  */
 class IdcSsoAutoLogin
 {
     public function handle(Request $request, Closure $next): Response
     {
-        // ── Ya autenticado — no hacer nada ─────────────────────
+        // ── Ya autenticado ────────────────────────────────────────
         if (Auth::check()) {
             return $next($request);
         }
 
-        // ── Leer cookies IDC ───────────────────────────────────
-        $useridc  = $request->cookie('id')    ?? null;
-        $nickname = $request->cookie('nick')  ?? null;
-        $idcToken = $request->cookie('token') ?? null;
+        // ── Leer cookies IDC ──────────────────────────────────────
+        $useridc  = (string) ($request->cookie('id')    ?? '');
+        $nickname = (string) ($request->cookie('nick')  ?? '');
+        $idcToken = (string) ($request->cookie('token') ?? '');
 
-        // Sin cookies válidas — pasar como invitado
-        if (! $useridc || ! $nickname || strlen((string) $useridc) < 1) {
+        if (! $useridc || ! $nickname || ! $idcToken) {
             return $next($request);
         }
 
-        $useridc  = (string) $useridc;
-        $nickname = urldecode((string) $nickname);
+        $nickname = urldecode($nickname);
 
-        // ── Validar idc_token contra la API central IDC ────────
-        // Sin esta verificación, cualquier cookie forjada daría acceso.
-        if (! $idcToken || ! $this->verifyTokenWithApi((string) $idcToken, $useridc)) {
-            Log::warning("[IDCGames SSO] Cookie token failed API verification for useridc={$useridc}");
+        // ── Verificar token contra auth.idcgames.com ──────────────
+        $verified = IdcSsoService::verifyToken($idcToken, $useridc);
+
+        if (! $verified) {
+            Log::warning("[IDCGames SSO] Token inválido — useridc={$useridc}");
             return $next($request);
         }
 
+        // ── Resolver usuario local ────────────────────────────────
         try {
-            $userModel = config('auth.providers.users.model', \App\Models\User::class);
+            $idcData = [
+                'useridc' => $verified['useridc'],
+                'nick'    => $verified['nick'] ?? $nickname,
+                'email'   => $verified['email'] ?? null,
+                'token'   => $idcToken,
+            ];
 
-            // ── Buscar por useridc ─────────────────────────────
-            $user = $userModel::where('useridc', $useridc)->first();
+            $user = $this->resolveUser($idcData);
 
             if (! $user) {
-                // ── Crear usuario automáticamente ─────────────
-                $user = $userModel::create([
-                    'useridc'   => $useridc,
-                    'username'  => $nickname,
-                    'nickname'  => $nickname,
-                    'name'      => $nickname,
-                    'email'     => null,
-                    'password'  => bcrypt(str()->random(32)),
-                    'idc_token' => $idcToken,
-                ]);
-
-                Log::info("[IDCGames SSO] Created new user from cookies: useridc={$useridc}, nick={$nickname}");
-            } else {
-                // ── Actualizar token si cambió ─────────────────
-                if ($user->idc_token !== $idcToken) {
-                    $user->idc_token = $idcToken;
-                    $user->save();
-                }
+                return $next($request);
             }
 
-            // ── Autenticar (sesión web normal) ─────────────────
+            // ── Login ─────────────────────────────────────────────
             Auth::login($user, remember: true);
             $request->session()->regenerate();
 
-            Log::info("[IDCGames SSO] Auto-logged in user: {$nickname} (useridc={$useridc})");
+            Log::info('[IDCGames SSO] Auto-login: ' . $idcData['nick'] . ' (useridc=' . $idcData['useridc'] . ')');
+
+            // ── Hook post-login (Sanctum token, cookies extra…) ───
+            if (app()->bound('idcgames.sso.after_login')) {
+                app('idcgames.sso.after_login')($user, $request);
+            }
 
         } catch (\Throwable $e) {
-            // No interrumpir la request si el SSO falla
-            Log::warning("[IDCGames SSO] Auto-login failed: " . $e->getMessage());
+            Log::warning('[IDCGames SSO] Auto-login fallido: ' . $e->getMessage());
         }
 
         return $next($request);
     }
 
-    /**
-     * Verifica el idc_token contra auth.idcgames.com (POST /api/web/verify-legacy-token).
-     * Cacheado 5 minutos para no golpear el servicio en cada request.
-     *
-     * Fallback automático a unilogin/SoloLoginJuegoUnico.php si el auth service
-     * no está disponible (timeout / 5xx), para no romper el SSO durante la migración.
-     */
-    private function verifyTokenWithApi(string $token, string $useridc): bool
+    // ── Resolución de usuario local ───────────────────────────────────────
+
+    private function resolveUser(array $idcData): ?object
     {
-        $cacheKey = 'idc_sso_token_' . sha1($token);
+        // Resolver personalizado del proyecto
+        if (app()->bound('idcgames.sso.resolver')) {
+            return app('idcgames.sso.resolver')($idcData);
+        }
 
-        return \Illuminate\Support\Facades\Cache::remember($cacheKey, 300, function () use ($token, $useridc) {
-            // ── Primary: auth.idcgames.com ─────────────────────
-            $authBase = rtrim((string) config('idcgames-ui.idc_api.auth_url', ''), '/');
-            $authPath = (string) config('idcgames-ui.idc_api.verify_token_path', '/api/web/verify-legacy-token');
+        // Resolver por defecto: usa config('auth.providers.users.model')
+        // y rellena solo los campos en $fillable del modelo.
+        $modelClass = config('auth.providers.users.model', \App\Models\User::class);
 
-            if ($authBase) {
-                try {
-                    $curl = curl_init();
-                    curl_setopt_array($curl, [
-                        CURLOPT_URL            => $authBase . $authPath,
-                        CURLOPT_POST           => true,
-                        CURLOPT_POSTFIELDS     => http_build_query(['token' => $token, 'useridc' => $useridc]),
-                        CURLOPT_RETURNTRANSFER => true,
-                        CURLOPT_TIMEOUT        => 5,
-                        CURLOPT_HTTPHEADER     => ['Accept: application/json', 'Content-Type: application/x-www-form-urlencoded'],
-                    ]);
-                    $response = curl_exec($curl);
-                    $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-                    $curlErr  = curl_error($curl);
-                    curl_close($curl);
+        $user = $modelClass::where('useridc', $idcData['useridc'])->first();
 
-                    if (! $curlErr && $response && $httpCode === 200) {
-                        $data = json_decode($response, true);
-                        if (isset($data['valid']) && $data['valid'] === true) {
-                            return (string) ($data['useridc'] ?? '') === $useridc;
-                        }
-                        return false; // auth service responded but token is invalid
-                    }
-
-                    Log::warning('[IDCGames SSO] auth.idcgames.com unavailable, falling back to legacy', [
-                        'http_code' => $httpCode, 'curl_err' => $curlErr,
-                    ]);
-                } catch (\Throwable $e) {
-                    Log::warning('[IDCGames SSO] auth.idcgames.com error: ' . $e->getMessage());
-                }
+        if (! $user) {
+            $user = $this->createUser($modelClass, $idcData);
+            Log::info('[IDCGames SSO] Usuario creado: ' . $idcData['nick'] . ' (useridc=' . $idcData['useridc'] . ')');
+        } else {
+            // Actualizar token si cambió
+            $fillable = (new $modelClass)->getFillable();
+            if (in_array('idc_token', $fillable) && $user->idc_token !== $idcData['token']) {
+                $user->idc_token = $idcData['token'];
+                $user->save();
             }
+        }
 
-            // ── Fallback: legacy SoloLoginJuegoUnico.php ──────
-            $legacyUrl = config('idcgames-ui.idc_api.unilogin_url') . '?token=' . urlencode($token);
+        return $user;
+    }
 
-            try {
-                $curl = curl_init();
-                curl_setopt_array($curl, [
-                    CURLOPT_URL            => $legacyUrl,
-                    CURLOPT_RETURNTRANSFER => true,
-                    CURLOPT_TIMEOUT        => 5,
-                    CURLOPT_HTTPHEADER     => ['accept: */*'],
-                ]);
-                $response = curl_exec($curl);
-                curl_close($curl);
+    /**
+     * Crea el usuario con los campos que el modelo tenga en $fillable.
+     * Soporta modelos con distintos nombres de campo (password/hash, etc.).
+     */
+    private function createUser(string $modelClass, array $d): object
+    {
+        $fillable = (new $modelClass)->getFillable();
+        $has      = fn(string $field) => in_array($field, $fillable);
 
-                if (! $response) return false;
+        $data = array_filter([
+            'useridc'           => $has('useridc')           ? $d['useridc']                        : null,
+            'username'          => $has('username')          ? $d['nick']                            : null,
+            'nickname'          => $has('nickname')          ? $d['nick']                            : null,
+            'name'              => $has('name')              ? $d['nick']                            : null,
+            'email'             => $has('email')             ? ($d['email'] ?? null)                 : null,
+            'idc_token'         => $has('idc_token')         ? $d['token']                           : null,
+            'password'          => $has('password')          ? bcrypt(str()->random(32))             : null,
+            'hash'              => $has('hash')              ? bcrypt(str()->random(32))             : null,
+            'color'             => $has('color')             ? '#' . substr(md5($d['nick']), 0, 6)   : null,
+            'email_verified_at' => $has('email_verified_at') ? now()                                 : null,
+        ], fn($v) => $v !== null);
 
-                $data      = json_decode($response);
-                $apiUserId = $data->content->iIDUsuario ?? $data->iIDUsuario ?? null;
-                return $apiUserId && (string) $apiUserId === $useridc;
-
-            } catch (\Throwable $e) {
-                Log::warning('[IDCGames SSO] Legacy token fallback failed: ' . $e->getMessage());
-                return false;
-            }
-        });
+        return $modelClass::create($data);
     }
 }

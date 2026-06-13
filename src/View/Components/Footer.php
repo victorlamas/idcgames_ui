@@ -15,6 +15,9 @@ class Footer extends Component
 
     public function render()
     {
+        if (Navbar::detectLauncher()) {
+            return '';
+        }
         return view('idcgames::components.footer');
     }
 }
