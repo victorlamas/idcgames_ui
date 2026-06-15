@@ -66,10 +66,10 @@
 
 <script setup>
 import { computed } from 'vue'
-const isLauncher = computed(() => /idclauncher/i.test(navigator.userAgent))
-import { computed } from 'vue'
 import { usePage } from '@inertiajs/vue3'
 import { useI18n } from 'vue-i18n'
+
+const isLauncher = computed(() => /idclauncher/i.test(navigator.userAgent))
 
 const { t } = useI18n()
 const page  = usePage()
