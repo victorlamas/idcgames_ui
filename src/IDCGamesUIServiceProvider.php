@@ -2,8 +2,10 @@
 
 namespace IDCGames\UI;
 
+use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Blade;
+use IDCGames\UI\Support\IdcSessionCookies;
 use IDCGames\UI\View\Components\Layout;
 use IDCGames\UI\View\Components\Navbar;
 use IDCGames\UI\View\Components\Footer;
@@ -46,6 +48,13 @@ class IDCGamesUIServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Cookies IDC en claro sobre .idcgames.com: no cifrar ni descifrar.
+        if (class_exists(EncryptCookies::class)) {
+            $this->app->afterResolving(EncryptCookies::class, function (EncryptCookies $middleware) {
+                $middleware->disableFor(IdcSessionCookies::NAMES);
+            });
+        }
+
         // ── Views ──────────────────────────────────────────────
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 'idcgames');
 

@@ -2,6 +2,7 @@
 
 namespace IDCGames\UI\Services;
 
+use IDCGames\UI\Support\IdcSessionCookies;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
@@ -30,7 +31,7 @@ class IdcSsoService
      */
     public static function tokenFromRequest(\Illuminate\Http\Request $request): string
     {
-        $auth = trim((string) ($request->cookie('auth_token') ?? ''));
+        $auth = trim(IdcSessionCookies::get($request, 'auth_token'));
         if ($auth !== '') {
             try {
                 return rawurldecode($auth);
@@ -39,7 +40,7 @@ class IdcSsoService
             }
         }
 
-        $legacy = trim((string) ($request->cookie('token') ?? ''));
+        $legacy = trim(IdcSessionCookies::get($request, 'token'));
 
         return $legacy !== '' ? rawurldecode($legacy) : '';
     }
@@ -86,6 +87,10 @@ class IdcSsoService
         $verifyPath  = '/' . ltrim((string) config('idcgames-ui.idc_api.verify_token_path', '/api/web/verify-token'), '/');
         $internalKey = (string) config('idcgames-ui.idc_api.internal_key', '');
 
+        if ($internalKey === '') {
+            Log::warning('[IDCGames SSO] INTERNAL_API_KEY vacío — verify-legacy-token será 401');
+        }
+
         $headers = ['Accept: application/json', 'Content-Type: application/x-www-form-urlencoded'];
         if ($internalKey) {
             $headers[] = 'X-Internal-Key: ' . $internalKey;
@@ -116,6 +121,7 @@ class IdcSsoService
                 Log::warning('[IDCGames SSO] verify-legacy-token no disponible', [
                     'http_code' => $httpCode,
                     'curl_err'  => $curlErr,
+                    'has_internal_key' => $internalKey !== '',
                 ]);
                 return null;
             }

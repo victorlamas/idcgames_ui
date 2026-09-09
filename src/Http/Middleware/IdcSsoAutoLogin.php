@@ -4,6 +4,7 @@ namespace IDCGames\UI\Http\Middleware;
 
 use Closure;
 use IDCGames\UI\Services\IdcSsoService;
+use IDCGames\UI\Support\IdcSessionCookies;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -53,9 +54,9 @@ class IdcSsoAutoLogin
             return $next($request);
         }
 
-        // ── Leer cookies IDC ──────────────────────────────────────
-        $useridc  = (string) ($request->cookie('id')    ?? '');
-        $nickname = (string) ($request->cookie('nick')  ?? '');
+        // ── Leer cookies IDC (header crudo si EncryptCookies las anuló) ──
+        $useridc  = IdcSessionCookies::get($request, 'id');
+        $nickname = IdcSessionCookies::get($request, 'nick');
         $idcToken = IdcSsoService::tokenFromRequest($request);
 
         if (! $useridc || ! $nickname || ! $idcToken) {
