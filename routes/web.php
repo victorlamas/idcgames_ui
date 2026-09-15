@@ -20,11 +20,12 @@ if (app()->environment(['local', 'development', 'testing'])) {
 }
 
 // ── IDC Auth Proxy ───────────────────────────────────────────────────────
-// Proxea /idc-auth/* y /social/* al auth server para evitar CORS.
-// El browser usa forum.idcgames.com/idc-auth como base (mismo origen).
+// Proxea /idc-auth/* al auth server para evitar CORS.
+// El browser usa IDC_AUTH_PUBLIC_URL (ej. https://{proyecto}.idcgames.com/idc-auth)
+// como base del widget, en vez de auth.idcgames.com directo.
 // El callback OAuth (Google, etc.) va directo a auth.idcgames.com — no pasa por aquí.
-// IDC_AUTH_URL        = https://auth.idcgames.com  (en .env de cada proyecto)
-// IDC_AUTH_PUBLIC_URL = https://{proyecto}.idcgames.com/idc-auth
+// IDC_AUTH_URL        = https://auth.idcgames.com  (destino server-side del proxy)
+// IDC_AUTH_PUBLIC_URL = https://{proyecto}.idcgames.com/idc-auth  (base para el browser)
 Route::middleware('web')->group(function () {
     $makeProxy = function (string $prefix = '') {
         $target = config('services.idc_auth.url', 'https://auth.idcgames.com');
@@ -40,15 +41,27 @@ Route::middleware('web')->group(function () {
             )->withOptions(['verify' => false, 'allow_redirects' => false, 'timeout' => 30])
              ->send(request()->method(), $url, ['body' => request()->getContent()]);
 
-            return response($response->body(), $response->status())
+            $proxied = response($response->body(), $response->status())
                 ->header('Access-Control-Allow-Origin', request()->header('Origin', '*'))
                 ->header('Access-Control-Allow-Credentials', 'true')
                 ->withHeaders(
                     collect($response->headers())
-                        ->except(['set-cookie', 'transfer-encoding'])
+                        ->except(['set-cookie', 'Set-Cookie', 'transfer-encoding', 'Transfer-Encoding'])
                         ->map(fn($v) => is_array($v) ? $v[0] : $v)
                         ->toArray()
                 );
+
+            // Reenviar TODAS las Set-Cookie del upstream (auth.idcgames.com) al browser.
+            // Sin esto, bootstrap-session y login vía proxy no persisten cookies.
+            foreach ($response->headers() as $name => $values) {
+                if (strtolower($name) === 'set-cookie') {
+                    foreach ((array) $values as $cookie) {
+                        $proxied->headers->set('Set-Cookie', $cookie, false);
+                    }
+                }
+            }
+
+            return $proxied;
         };
     };
 

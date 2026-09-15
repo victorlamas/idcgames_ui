@@ -17,7 +17,8 @@ use Illuminate\Support\Facades\Log;
 class IdcSsoService
 {
     /**
-     * Verifica un idc_token contra auth.idcgames.com/api/web/verify-legacy-token.
+     * Verifica un idc_token contra auth.idcgames.com (idcgames-ui.idc_api.verify_token_path,
+     * por defecto /api/web/verify-token).
      *
      * @param  string  $token    idc_token a verificar
      * @param  string  $useridc  ID del usuario (para validación cruzada)
@@ -54,6 +55,7 @@ class IdcSsoService
     private static function callVerifyEndpoint(string $token, string $useridc): ?array
     {
         $authBase    = rtrim((string) config('idcgames-ui.idc_api.auth_url', 'https://auth.idcgames.com'), '/');
+        $verifyPath  = '/' . ltrim((string) config('idcgames-ui.idc_api.verify_token_path', '/api/web/verify-token'), '/');
         $internalKey = (string) config('idcgames-ui.idc_api.internal_key', '');
 
         $headers = ['Accept: application/json', 'Content-Type: application/x-www-form-urlencoded'];
@@ -64,9 +66,14 @@ class IdcSsoService
         try {
             $curl = curl_init();
             curl_setopt_array($curl, [
-                CURLOPT_URL            => $authBase . '/api/web/verify-legacy-token',
+                CURLOPT_URL            => $authBase . $verifyPath,
                 CURLOPT_POST           => true,
-                CURLOPT_POSTFIELDS     => http_build_query(['token' => $token, 'useridc' => $useridc]),
+                // auth_token + token: compat con distintos nombres de parámetro del auth server
+                CURLOPT_POSTFIELDS     => http_build_query([
+                    'auth_token' => $token,
+                    'token'      => $token,
+                    'useridc'    => $useridc,
+                ]),
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_TIMEOUT        => 5,
                 CURLOPT_HTTPHEADER     => $headers,

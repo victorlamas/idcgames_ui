@@ -7,30 +7,49 @@ Proporciona: NavBar, Footer, Layout, Auth views, Tailwind design tokens, middlew
 
 ## Instalación en un proyecto hijo (gifts, gamer, forum)
 
-### 1. Añadir el package via `composer.json` (path local)
+### 1. Añadir el package via `composer.json`
+
+El package vive en `https://github.com/victorlamas/idcgames_ui.git` (repositorio público) y
+se versiona con tags `vX.Y.Z` (semver). Cada proyecto hijo debe apuntar a ese repo con un
+repositorio `vcs`, **no** a una ruta local — así los cambios llegan con `composer update`
+en vez de tener que editar el vendor a mano.
 
 ```json
 // composer.json del proyecto hijo
 {
     "repositories": [
         {
-            "type": "path",
-            "url": "../idcgames_ui",
-            "options": {
-                "symlink": true
-            }
+            "type": "vcs",
+            "url": "https://github.com/victorlamas/idcgames_ui.git"
         }
     ],
     "require": {
-        "idcgames/ui": "*"
+        "idcgames/ui": "^1.0"
     }
 }
 ```
 
 Luego:
 ```bash
-composer require idcgames/ui
+composer require idcgames/ui:^1.0
 ```
+
+Para traer una nueva versión publicada (tras un `git tag vX.Y.Z` en el package):
+```bash
+composer update idcgames/ui
+```
+
+> **Desarrollo local del package:** si estás editando `idcgames/ui` y `gifts`/`gamer`/`forum`
+> a la vez y quieres ver los cambios sin publicar un tag, usa temporalmente un repositorio
+> `path` en su lugar (`{"type": "path", "url": "../idcgames_ui", "options": {"symlink": true}}`
+> con `"idcgames/ui": "*"`). Es solo para desarrollo — antes de desplegar, vuelve a la
+> configuración `vcs` + versión de arriba.
+>
+> **Versionado:** cada cambio publicado en `main` debe subir la `version` en
+> `composer.json` del package y crear su tag (`git tag vX.Y.Z && git push --tags`).
+> Sin tag, `composer update` no verá el cambio si el proyecto hijo está fijado a una
+> versión (`^1.0`); solo lo vería con `dev-main`, que no se recomienda en producción
+> porque cualquier push a `main` afectaría a todos los hijos sin control de versión.
 
 ### 2. Publicar el config
 
@@ -52,19 +71,75 @@ IDCGAMES_GIFTS_URL=https://gifts.idcgames.com
 IDCGAMES_GAMER_URL=https://gamer.idcgames.com
 IDCGAMES_FORUM_URL=https://forum.idcgames.com
 
-# Auth service IDC — valida el idc_token via POST (reemplaza SoloLoginJuegoUnico)
+# Auth service IDC — valida el idc_token via POST server-to-server
 IDC_AUTH_URL=https://auth.idcgames.com
-IDC_VERIFY_TOKEN_PATH=/api/web/verify-legacy-token
+IDC_VERIFY_TOKEN_PATH=/api/web/verify-token
+
+# Clave compartida para las llamadas servidor-a-servidor a IDC_AUTH_URL
+# (verify-token, etc.). Nunca se expone al browser. Debe coincidir con la
+# clave configurada en el auth server.
+INTERNAL_API_KEY=
 
 # Legacy unilogin (fallback automático si auth service no responde, no es necesario cambiar)
 # IDC_UNILOGIN_URL=https://en.idcgames.com/unilogin/SoloLoginJuegoUnico.php
 ```
 
 > **Migración unilogin → auth service:** el middleware `IdcSsoAutoLogin` llama primero a
-> `auth.idcgames.com/api/web/verify-legacy-token` (POST con `token` y `useridc`).
+> `auth.idcgames.com` + `IDC_VERIFY_TOKEN_PATH` (POST con `auth_token`, `token` y `useridc`,
+> más el header `X-Internal-Key: {INTERNAL_API_KEY}`).
 > Si el auth service no responde (timeout / 5xx), cae automáticamente al endpoint legacy
 > `SoloLoginJuegoUnico.php`, por lo que el SSO no se rompe durante la transición.
 > Una vez que el auth service esté estable, se puede eliminar la key `unilogin_url`.
+
+### 3.1 URLs de auth: server-side vs. browser (evitar CORS)
+
+El package expone dos conceptos de URL distintos para el auth service — **no son intercambiables**:
+
+| Variable | Quién la usa | Valor típico | Propósito |
+|---|---|---|---|
+| `IDC_AUTH_URL` | Server-side (proxy `/idc-auth/*`, `IdcSsoService`, verificación de tokens) | `https://auth.idcgames.com` | Destino real al que Laravel reenvía las peticiones del proxy y las llamadas server-to-server. |
+| `IDC_AUTH_PUBLIC_URL` | Browser (widget de login/registro) | `https://{proyecto}.idcgames.com/idc-auth` | Base que el navegador usa para cargar el widget y llamar a la API de auth. Al ser mismo-origen (vía el proxy `/idc-auth/*`), evita problemas de CORS y permite que las cookies del auth server se guarden correctamente. |
+| `IDC_AUTH_WIDGET_URL` *(opcional)* | Browser | — | Override explícito si se quiere apuntar el widget a otra URL distinta de `IDC_AUTH_PUBLIC_URL`. |
+
+Cada proyecto hijo debe definir en su propio `config/services.php`:
+
+```php
+// config/services.php del proyecto hijo
+'idc_auth' => [
+    'url'        => env('IDC_AUTH_URL', 'https://auth.idcgames.com'),
+    'public_url' => env('IDC_AUTH_PUBLIC_URL'),
+    'widget_url' => env('IDC_AUTH_WIDGET_URL', env('IDC_AUTH_PUBLIC_URL', env('IDC_AUTH_URL', 'https://auth.idcgames.com'))),
+],
+```
+
+Y en el `.env`:
+
+```env
+IDC_AUTH_URL=https://auth.idcgames.com
+IDC_AUTH_PUBLIC_URL=https://{proyecto}.idcgames.com/idc-auth
+# IDC_AUTH_WIDGET_URL=  (opcional, solo si necesitas otra URL distinta a la pública)
+```
+
+**El browser NUNCA debe apuntar directo a `auth.idcgames.com`** (widget, `data-api-base`,
+meta `idc-auth-url`) — siempre debe usar `IDC_AUTH_PUBLIC_URL` / `IDC_AUTH_WIDGET_URL`, que
+resuelve al proxy same-origin `/idc-auth/{path}` (ver `routes/web.php`). El proxy reenvía
+la petición a `IDC_AUTH_URL` server-side y devuelve al browser **todas** las cabeceras
+`Set-Cookie` de la respuesta, para que el login / `bootstrap-session` persistan la sesión.
+
+El meta tag que consume el widget (y `IDCNavbar.vue` vía `data-api-base`) se puede añadir
+manualmente en el layout del proyecto hijo:
+
+```blade
+<meta name="idc-auth-url" content="{{ rtrim(config('services.idc_auth.widget_url'), '/') }}">
+```
+
+o, para no duplicarlo en cada repo, incluyendo el partial que ya trae el package:
+
+```blade
+@include('idcgames::idc-auth-meta')
+```
+
+(ya incluido automáticamente si usas `<x-idcgames::layout>`).
 
 ### 4. Configurar Tailwind del proyecto hijo
 

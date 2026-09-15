@@ -249,7 +249,8 @@ function handleClickOutside(e) {
 }
 
 // ── Load IDC Auth Widget from the navbar ──────────────────────────────────
-// Read auth URL from meta tag (set by blade from .env IDC_AUTH_URL)
+// Read auth URL from meta tag (set by blade from .env IDC_AUTH_PUBLIC_URL, NOT IDC_AUTH_URL —
+// the browser must hit the same-origin proxy/public base to avoid CORS)
 const IDC_AUTH_URL = document.querySelector('meta[name="idc-auth-url"]')?.content ?? 'https://auth.idcgames.com'
 
 function loadAuthWidget() {

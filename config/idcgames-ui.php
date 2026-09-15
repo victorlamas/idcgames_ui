@@ -37,10 +37,13 @@ return [
     */
 
     'idc_api' => [
-        // Auth service — servidor canónico de validación de tokens IDC
-        'auth_url'    => env('IDC_AUTH_URL', 'https://auth.idcgames.com'),
+        // Auth service — servidor canónico de validación de tokens IDC (server-side, no CORS)
+        'auth_url'          => env('IDC_AUTH_URL', 'https://auth.idcgames.com'),
+        // Path del endpoint de verificación server-to-server sobre auth_url
+        'verify_token_path' => env('IDC_VERIFY_TOKEN_PATH', '/api/web/verify-token'),
         // Clave compartida para llamadas servidor-a-servidor (nunca expuesta al browser)
-        'internal_key' => env('INTERNAL_API_KEY', ''),
+        // Se envía como header X-Internal-Key. Debe coincidir con la del auth server.
+        'internal_key'      => env('INTERNAL_API_KEY', ''),
     ],
 
     /*
