@@ -73,7 +73,7 @@ $idcAuthProxy = function (string $path) {
     return $proxied;
 };
 
-if (config('idcgames-ui.idc_auth.laravel_proxy', false)) {
+if (config('idcgames-ui.idc_auth.laravel_proxy', true)) {
     Route::any('/idc-auth/{path}', $idcAuthProxy)->where('path', '.*');
 }
 

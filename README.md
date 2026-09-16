@@ -141,50 +141,43 @@ o, para no duplicarlo en cada repo, incluyendo el partial que ya trae el package
 
 (ya incluido automáticamente si usas `<x-idcgames::layout>`).
 
-### 3.2 Proxy `/idc-auth` en nginx (producción — **support / mud**)
+### 3.2 Proxy `/idc-auth` en Laravel (OVH — **support, mud, …**)
 
-En OVH/producción, **support y mud suelen tener ya** un `location /idc-auth/` en nginx
-(reenvío a `auth.idcgames.com`). El browser usa `https://{proyecto}.idcgames.com/idc-auth`;
-nginx hace el puente (GET widget, POST `token-login`, cookies).
+En los proyectos IDC el browser usa `https://{proyecto}.idcgames.com/idc-auth` y **Laravel**
+reenvía a `IDC_AUTH_URL` (`routes/web.php` del package `idcgames/ui`, **≥ 1.0.2**, sin CSRF).
 
-Referencia para comparar vhosts (no implica instalar de cero):
+Checklist en cada proyecto (ej. **mud**):
 
-`vendor/idcgames/ui/deploy/nginx-idc-auth-proxy.conf.example`
-
-**Por defecto el package NO registra** la ruta PHP `/idc-auth/*` — asume nginx en producción
-(support, mud, etc.). Tras `composer update idcgames/ui`: `php artisan route:clear`.
-
-**Desarrollo local sin nginx**, activa el proxy PHP:
-
-```env
-IDC_AUTH_LARAVEL_PROXY=true
+```bash
+composer update idcgames/ui   # ≥ 1.0.6 recomendado
+php artisan route:list | grep idc-auth    # debe listar ANY idc-auth/{path}
+php artisan config:clear
 ```
 
-El **JS del widget** se carga desde `https://auth.idcgames.com/widget/idc-auth-widget.js`
-(`data-api-base` sigue siendo el proxy `/idc-auth` del proyecto).
+`.env`:
 
-Si **`/idc-auth/widget/...` → 404** tras v1.0.4: el vhost no hace `proxy_pass` a auth y mandaba
-`/idc-auth` a Laravel; corrige nginx o temporalmente `IDC_AUTH_LARAVEL_PROXY=true`.
-
-Si **502 en POST** con nginx ya configurado:
-
-1. **Diff mud vs support**: `proxy_pass`, `Host auth.idcgames.com`, `proxy_ssl_server_name on`.
-2. **Orden de locations**: `/idc-auth/` **antes** de PHP / `try_files` (si el POST cae en Laravel → 502 HTML).
-3. Confirma que no queda ruta duplicada: `php artisan route:list | grep idc-auth` → vacío en producción.
+```env
+IDC_AUTH_URL=https://auth.idcgames.com
+IDC_AUTH_PUBLIC_URL=https://mud.idcgames.com/idc-auth
+APP_URL=https://mud.idcgames.com
+```
 
 Comprobación:
 
 ```bash
 curl -sS -o /dev/null -w '%{http_code}\n' 'https://mud.idcgames.com/idc-auth/i18n/es.json'
-curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
-  'https://mud.idcgames.com/idc-auth/api/web/token-login' \
-  -H 'Content-Type: application/x-www-form-urlencoded' \
-  -d 'nick=test&pass=test&game=1'
 ```
 
-(i18n → **200**; login con credenciales falsas → **401/422 JSON**, no **502 HTML**.)
+→ **200**. Si **404**: el package no carga rutas, `IDC_AUTH_LARAVEL_PROXY=false`, o rutas
+sobrescritas en `routes/web.php` del mud.
 
-Sin nginx (solo local): `IDC_AUTH_LARAVEL_PROXY=true` y `idcgames/ui` **≥ 1.0.2** (proxy PHP sin CSRF).
+El **JS del widget** (v1.0.5+) se carga desde `auth.idcgames.com`; las APIs usan `/idc-auth`.
+
+**502 en POST** (login): revisar que mud tenga `idcgames/ui` ≥ 1.0.2 y `IDC_AUTH_URL` alcanzable
+desde el servidor.
+
+Opcional nginx `proxy_pass`: `deploy/nginx-idc-auth-proxy.conf.example` — solo si migráis el
+proxy fuera de PHP; entonces `IDC_AUTH_LARAVEL_PROXY=false`.
 
 ### 4. Configurar Tailwind del proyecto hijo
 

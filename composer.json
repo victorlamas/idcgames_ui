@@ -2,7 +2,7 @@
     "name": "idcgames/ui",
     "description": "Shared UI package for IDCGames services — NavBar, Footer, Layout, Auth",
     "type": "library",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "license": "proprietary",
     "autoload": {
         "psr-4": {
