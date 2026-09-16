@@ -73,7 +73,9 @@ $idcAuthProxy = function (string $path) {
     return $proxied;
 };
 
-Route::any('/idc-auth/{path}', $idcAuthProxy)->where('path', '.*');
+if (config('idcgames-ui.idc_auth.laravel_proxy', true)) {
+    Route::any('/idc-auth/{path}', $idcAuthProxy)->where('path', '.*');
+}
 
 Route::middleware('web')->group(function () {
     // /social/* → redirect DIRECTO al auth server (NO proxy)

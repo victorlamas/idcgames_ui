@@ -1,0 +1,42 @@
+# IDC Auth — reverse proxy (same pattern as support.idcgames.com)
+#
+# Muchos proyectos (support, mud, …) YA tienen este location en nginx.
+# Usa este fichero para COMPARAR con el vhost existente, no asumas que falta.
+# Lo crítico: proxy_set_header Host auth.idcgames.com; y que /idc-auth/
+# esté ANTES del location que manda todo a index.php (Laravel).
+#
+# Install (solo si no existe): copy into the server {} block
+# BEFORE the generic PHP / try_files location.
+#
+#   include /path/to/httpdocs/vendor/idcgames/ui/deploy/nginx-idc-auth-proxy.conf.example;
+#
+# Or paste the location block below. Then:
+#   sudo nginx -t && sudo systemctl reload nginx
+#
+# In the project .env (recommended when using this nginx proxy):
+#   IDC_AUTH_LARAVEL_PROXY=false
+#
+# Upstream auth host (change only for .idcgames.net stacks):
+#   set $idc_auth_upstream https://auth.idcgames.com;
+
+location /idc-auth/ {
+    proxy_pass https://auth.idcgames.com/;
+    proxy_http_version 1.1;
+
+    proxy_ssl_server_name on;
+    proxy_ssl_name auth.idcgames.com;
+
+    proxy_set_header Host auth.idcgames.com;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    proxy_connect_timeout 30s;
+    proxy_send_timeout 120s;
+    proxy_read_timeout 120s;
+
+    client_max_body_size 16m;
+
+    # Pass Set-Cookie from auth to the browser (login / bootstrap-session)
+    proxy_pass_header Set-Cookie;
+}

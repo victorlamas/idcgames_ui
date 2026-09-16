@@ -141,6 +141,46 @@ o, para no duplicarlo en cada repo, incluyendo el partial que ya trae el package
 
 (ya incluido automáticamente si usas `<x-idcgames::layout>`).
 
+### 3.2 Proxy `/idc-auth` en nginx (producción — **support / mud**)
+
+En OVH/producción, **support y mud suelen tener ya** un `location /idc-auth/` en nginx
+(reenvío a `auth.idcgames.com`). El browser usa `https://{proyecto}.idcgames.com/idc-auth`;
+nginx hace el puente (GET widget, POST `token-login`, cookies).
+
+Referencia para comparar vhosts (no implica instalar de cero):
+
+`vendor/idcgames/ui/deploy/nginx-idc-auth-proxy.conf.example`
+
+**Si mud da 502 en POST pero support va bien**, lo habitual es:
+
+1. **Doble proxy**: nginx + ruta Laravel `/idc-auth/*` (package `idcgames/ui`). Desactiva el PHP:
+
+```env
+IDC_AUTH_LARAVEL_PROXY=false
+```
+
+`php artisan config:clear` — así solo nginx atiende `/idc-auth` (como support con UI vieja).
+
+2. **Diff nginx mud vs support**: mismo `proxy_pass`, `proxy_set_header Host auth.idcgames.com;`,
+   `proxy_ssl_server_name on;`, timeouts. POST que cae en `index.php` suele devolver 502 HTML.
+
+3. **Orden de locations**: `location /idc-auth/` **antes** de `location /` / PHP-FPM.
+
+Comprobación:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' 'https://mud.idcgames.com/idc-auth/i18n/es.json'
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
+  'https://mud.idcgames.com/idc-auth/api/web/token-login' \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'nick=test&pass=test&game=1'
+```
+
+(i18n → **200**; login con credenciales falsas → **401/422 JSON**, no **502 HTML**.)
+
+Si **no** hay nginx, deja `IDC_AUTH_LARAVEL_PROXY=true` (default) y usa `idcgames/ui` **≥ 1.0.2**
+(proxy PHP sin CSRF).
+
 ### 4. Configurar Tailwind del proyecto hijo
 
 ```js

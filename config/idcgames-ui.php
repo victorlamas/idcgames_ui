@@ -36,6 +36,18 @@ return [
     | y devuelve los datos del usuario (email, etc.).
     */
 
+    /*
+    |--------------------------------------------------------------------------
+    | /idc-auth browser proxy
+    |--------------------------------------------------------------------------
+    | En producción (support, mud, etc.) el proxy suele hacerlo nginx (ver
+    | deploy/nginx-idc-auth-proxy.conf.example). Pon IDC_AUTH_LARAVEL_PROXY=false
+    | para no registrar la ruta PHP duplicada.
+    */
+    'idc_auth' => [
+        'laravel_proxy' => env('IDC_AUTH_LARAVEL_PROXY', true),
+    ],
+
     'idc_api' => [
         // Auth service — servidor canónico de validación de tokens IDC (server-side, no CORS)
         'auth_url'          => env('IDC_AUTH_URL', 'https://auth.idcgames.com'),
