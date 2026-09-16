@@ -156,6 +156,15 @@ function refreshSession() {
     idcSession.value = (s && s.id) ? s : null
 }
 
+function onIdcSessionEvent(e) {
+    const detail = e?.detail
+    if (detail && detail.id) {
+        idcSession.value = detail
+        return
+    }
+    refreshSession()
+}
+
 const isLoggedIn = computed(() => {
     // 1. Laravel session (if middleware set auth.user)
     if (page.props.auth?.user) return true
@@ -251,7 +260,20 @@ function handleClickOutside(e) {
 // ── Load IDC Auth Widget from the navbar ──────────────────────────────────
 // Read auth URL from meta tag (set by blade from .env IDC_AUTH_PUBLIC_URL, NOT IDC_AUTH_URL —
 // the browser must hit the same-origin proxy/public base to avoid CORS)
-const IDC_AUTH_URL = document.querySelector('meta[name="idc-auth-url"]')?.content ?? 'https://auth.idcgames.com'
+function defaultIdcAuthUrl() {
+    const host = window.location.hostname.toLowerCase()
+    if (host === 'auth.idcgames.com' || host === 'auth.idcgames.net') {
+        return window.location.origin
+    }
+    if (host.endsWith('.idcgames.com') || host.endsWith('.idcgames.net')
+        || host === 'idcgames.com' || host === 'idcgames.net') {
+        return `${window.location.origin}/idc-auth`
+    }
+    return 'https://auth.idcgames.com'
+}
+
+const IDC_AUTH_URL = document.querySelector('meta[name="idc-auth-url"]')?.content?.trim()
+    || defaultIdcAuthUrl()
 
 function loadAuthWidget() {
     if (window.IDCAuthWidget) { refreshSession(); return }
@@ -267,10 +289,17 @@ function loadAuthWidget() {
 
 onMounted(() => {
     document.addEventListener('click', handleClickOutside)
+    window.addEventListener('idc:login', onIdcSessionEvent)
+    window.addEventListener('idc:register', onIdcSessionEvent)
+    window.addEventListener('idc:session-sync', onIdcSessionEvent)
+    window.addEventListener('idc:logout', () => { idcSession.value = null })
     loadAuthWidget()
 })
 onUnmounted(() => {
     document.removeEventListener('click', handleClickOutside)
+    window.removeEventListener('idc:login', onIdcSessionEvent)
+    window.removeEventListener('idc:register', onIdcSessionEvent)
+    window.removeEventListener('idc:session-sync', onIdcSessionEvent)
 })
 </script>
 

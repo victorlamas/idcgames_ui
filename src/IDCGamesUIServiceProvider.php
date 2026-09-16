@@ -16,6 +16,26 @@ class IDCGamesUIServiceProvider extends ServiceProvider
             __DIR__ . '/../config/idcgames-ui.php',
             'idcgames-ui'
         );
+
+        $this->app->booted(function (): void {
+            $existing = config('services.idc_auth');
+            if (is_array($existing) && ! empty($existing['widget_url'])) {
+                return;
+            }
+
+            $appUrl = rtrim((string) config('app.url', ''), '/');
+            $publicProxy = $appUrl !== '' ? $appUrl.'/idc-auth' : null;
+
+            config([
+                'services.idc_auth' => array_merge([
+                    'url' => env('IDC_AUTH_URL', 'https://auth.idcgames.com'),
+                    'public_url' => env('IDC_AUTH_PUBLIC_URL', $publicProxy),
+                    'widget_url' => env('IDC_AUTH_WIDGET_URL')
+                        ?: env('IDC_AUTH_PUBLIC_URL', $publicProxy)
+                        ?: env('IDC_AUTH_URL', 'https://auth.idcgames.com'),
+                ], is_array($existing) ? $existing : []),
+            ]);
+        });
     }
 
     public function boot(): void
