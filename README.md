@@ -151,20 +151,20 @@ Referencia para comparar vhosts (no implica instalar de cero):
 
 `vendor/idcgames/ui/deploy/nginx-idc-auth-proxy.conf.example`
 
-**Si mud da 502 en POST pero support va bien**, lo habitual es:
+**Por defecto el package NO registra** la ruta PHP `/idc-auth/*` — asume nginx en producción
+(support, mud, etc.). Tras `composer update idcgames/ui`: `php artisan route:clear`.
 
-1. **Doble proxy**: nginx + ruta Laravel `/idc-auth/*` (package `idcgames/ui`). Desactiva el PHP:
+**Desarrollo local sin nginx**, activa el proxy PHP:
 
 ```env
-IDC_AUTH_LARAVEL_PROXY=false
+IDC_AUTH_LARAVEL_PROXY=true
 ```
 
-`php artisan config:clear` — así solo nginx atiende `/idc-auth` (como support con UI vieja).
+Si **502 en POST** con nginx ya configurado:
 
-2. **Diff nginx mud vs support**: mismo `proxy_pass`, `proxy_set_header Host auth.idcgames.com;`,
-   `proxy_ssl_server_name on;`, timeouts. POST que cae en `index.php` suele devolver 502 HTML.
-
-3. **Orden de locations**: `location /idc-auth/` **antes** de `location /` / PHP-FPM.
+1. **Diff mud vs support**: `proxy_pass`, `Host auth.idcgames.com`, `proxy_ssl_server_name on`.
+2. **Orden de locations**: `/idc-auth/` **antes** de PHP / `try_files` (si el POST cae en Laravel → 502 HTML).
+3. Confirma que no queda ruta duplicada: `php artisan route:list | grep idc-auth` → vacío en producción.
 
 Comprobación:
 
@@ -178,8 +178,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
 
 (i18n → **200**; login con credenciales falsas → **401/422 JSON**, no **502 HTML**.)
 
-Si **no** hay nginx, deja `IDC_AUTH_LARAVEL_PROXY=true` (default) y usa `idcgames/ui` **≥ 1.0.2**
-(proxy PHP sin CSRF).
+Sin nginx (solo local): `IDC_AUTH_LARAVEL_PROXY=true` y `idcgames/ui` **≥ 1.0.2** (proxy PHP sin CSRF).
 
 ### 4. Configurar Tailwind del proyecto hijo
 

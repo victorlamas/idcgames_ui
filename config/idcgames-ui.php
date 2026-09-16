@@ -40,12 +40,12 @@ return [
     |--------------------------------------------------------------------------
     | /idc-auth browser proxy
     |--------------------------------------------------------------------------
-    | En producción (support, mud, etc.) el proxy suele hacerlo nginx (ver
-    | deploy/nginx-idc-auth-proxy.conf.example). Pon IDC_AUTH_LARAVEL_PROXY=false
-    | para no registrar la ruta PHP duplicada.
+    | En producción (support, mud, …) el proxy lo hace nginx. Por defecto NO
+    | registramos ruta PHP /idc-auth. Solo en local: IDC_AUTH_LARAVEL_PROXY=true.
+    | Ver deploy/nginx-idc-auth-proxy.conf.example
     */
     'idc_auth' => [
-        'laravel_proxy' => env('IDC_AUTH_LARAVEL_PROXY', true),
+        'laravel_proxy' => env('IDC_AUTH_LARAVEL_PROXY', false),
     ],
 
     'idc_api' => [

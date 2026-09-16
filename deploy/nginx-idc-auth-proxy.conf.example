@@ -13,8 +13,8 @@
 # Or paste the location block below. Then:
 #   sudo nginx -t && sudo systemctl reload nginx
 #
-# In the project .env (recommended when using this nginx proxy):
-#   IDC_AUTH_LARAVEL_PROXY=false
+# Laravel proxy PHP está OFF por defecto (idcgames/ui asume nginx en producción).
+# Solo en local sin nginx: IDC_AUTH_LARAVEL_PROXY=true en .env
 #
 # Upstream auth host (change only for .idcgames.net stacks):
 #   set $idc_auth_upstream https://auth.idcgames.com;
