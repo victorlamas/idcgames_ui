@@ -10,11 +10,11 @@
         @include('idcgames::idc-auth-meta')
 --}}
 @php
-    $idcAuthCanonical = config('services.idc_auth.url', 'https://auth.idcgames.com');
-    $idcAuthPublicProxy = rtrim((string) config('app.url', ''), '/') . '/idc-auth';
-    $idcAuthWidgetUrl = config('services.idc_auth.widget_url')
+    use IDCGames\UI\Support\IdcAuthBrowserUrl;
+
+    $configured = config('services.idc_auth.widget_url')
         ?? config('services.idc_auth.public_url')
-        ?? ($idcAuthPublicProxy !== '/idc-auth' ? $idcAuthPublicProxy : null)
-        ?? $idcAuthCanonical;
+        ?? config('services.idc_auth.url');
+    $idcAuthWidgetUrl = IdcAuthBrowserUrl::resolve(is_string($configured) ? $configured : null);
 @endphp
 <meta name="idc-auth-url" content="{{ rtrim($idcAuthWidgetUrl, '/') }}">

@@ -260,20 +260,41 @@ function handleClickOutside(e) {
 // ── Load IDC Auth Widget from the navbar ──────────────────────────────────
 // Read auth URL from meta tag (set by blade from .env IDC_AUTH_PUBLIC_URL, NOT IDC_AUTH_URL —
 // the browser must hit the same-origin proxy/public base to avoid CORS)
+function isAuthHost(hostname) {
+    const h = hostname.toLowerCase()
+    return h === 'auth.idcgames.com' || h === 'auth.idcgames.net'
+}
+
+function isIdcGamesHost(hostname) {
+    const h = hostname.toLowerCase()
+    return h === 'idcgames.com' || h === 'idcgames.net'
+        || h.endsWith('.idcgames.com') || h.endsWith('.idcgames.net')
+}
+
 function defaultIdcAuthUrl() {
     const host = window.location.hostname.toLowerCase()
-    if (host === 'auth.idcgames.com' || host === 'auth.idcgames.net') {
-        return window.location.origin
-    }
-    if (host.endsWith('.idcgames.com') || host.endsWith('.idcgames.net')
-        || host === 'idcgames.com' || host === 'idcgames.net') {
-        return `${window.location.origin}/idc-auth`
-    }
+    if (isAuthHost(host)) return window.location.origin
+    if (isIdcGamesHost(host)) return `${window.location.origin}/idc-auth`
     return 'https://auth.idcgames.com'
 }
 
-const IDC_AUTH_URL = document.querySelector('meta[name="idc-auth-url"]')?.content?.trim()
-    || defaultIdcAuthUrl()
+/** Never use auth.idcgames.com direct from mud/support/etc — always /idc-auth proxy. */
+function resolveIdcAuthUrl() {
+    const host = window.location.hostname.toLowerCase()
+    const meta = document.querySelector('meta[name="idc-auth-url"]')?.content?.trim()
+    if (!meta) return defaultIdcAuthUrl()
+    try {
+        const parsed = new URL(meta, window.location.href)
+        if (isIdcGamesHost(host) && !isAuthHost(host) && isAuthHost(parsed.hostname)) {
+            return `${window.location.origin}/idc-auth`
+        }
+        return meta.replace(/\/+$/, '')
+    } catch {
+        return defaultIdcAuthUrl()
+    }
+}
+
+const IDC_AUTH_URL = resolveIdcAuthUrl()
 
 function loadAuthWidget() {
     if (window.IDCAuthWidget) { refreshSession(); return }

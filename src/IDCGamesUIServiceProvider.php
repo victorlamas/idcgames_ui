@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Blade;
 use IDCGames\UI\View\Components\Layout;
 use IDCGames\UI\View\Components\Navbar;
 use IDCGames\UI\View\Components\Footer;
+use IDCGames\UI\Support\IdcAuthBrowserUrl;
 
 class IDCGamesUIServiceProvider extends ServiceProvider
 {
@@ -19,22 +20,27 @@ class IDCGamesUIServiceProvider extends ServiceProvider
 
         $this->app->booted(function (): void {
             $existing = config('services.idc_auth');
-            if (is_array($existing) && ! empty($existing['widget_url'])) {
-                return;
+            if (! is_array($existing)) {
+                $existing = [];
             }
 
             $appUrl = rtrim((string) config('app.url', ''), '/');
             $publicProxy = $appUrl !== '' ? $appUrl.'/idc-auth' : null;
 
-            config([
-                'services.idc_auth' => array_merge([
-                    'url' => env('IDC_AUTH_URL', 'https://auth.idcgames.com'),
-                    'public_url' => env('IDC_AUTH_PUBLIC_URL', $publicProxy),
-                    'widget_url' => env('IDC_AUTH_WIDGET_URL')
-                        ?: env('IDC_AUTH_PUBLIC_URL', $publicProxy)
-                        ?: env('IDC_AUTH_URL', 'https://auth.idcgames.com'),
-                ], is_array($existing) ? $existing : []),
-            ]);
+            $merged = array_merge([
+                'url' => env('IDC_AUTH_URL', 'https://auth.idcgames.com'),
+                'public_url' => env('IDC_AUTH_PUBLIC_URL', $publicProxy),
+                'widget_url' => env('IDC_AUTH_WIDGET_URL')
+                    ?: env('IDC_AUTH_PUBLIC_URL', $publicProxy)
+                    ?: env('IDC_AUTH_URL', 'https://auth.idcgames.com'),
+            ], $existing);
+
+            $merged['widget_url'] = IdcAuthBrowserUrl::resolve(
+                $merged['widget_url'] ?? $merged['public_url'] ?? null,
+                $appUrl
+            );
+
+            config(['services.idc_auth' => $merged]);
         });
     }
 
