@@ -56,7 +56,7 @@ class IdcSsoAutoLogin
         // ── Leer cookies IDC ──────────────────────────────────────
         $useridc  = (string) ($request->cookie('id')    ?? '');
         $nickname = (string) ($request->cookie('nick')  ?? '');
-        $idcToken = (string) ($request->cookie('token') ?? '');
+        $idcToken = IdcSsoService::tokenFromRequest($request);
 
         if (! $useridc || ! $nickname || ! $idcToken) {
             return $next($request);

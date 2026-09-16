@@ -25,8 +25,36 @@ class IdcSsoService
      * @return array|null  ['useridc' => string, 'nick' => string|null, 'email' => string|null]
      *                     o null si el token es inválido / el servicio no responde.
      */
+    /**
+     * Pick auth_token (JWT) when present, else legacy token cookie.
+     */
+    public static function tokenFromRequest(\Illuminate\Http\Request $request): string
+    {
+        $auth = trim((string) ($request->cookie('auth_token') ?? ''));
+        if ($auth !== '') {
+            try {
+                return rawurldecode($auth);
+            } catch (\Throwable) {
+                return $auth;
+            }
+        }
+
+        $legacy = trim((string) ($request->cookie('token') ?? ''));
+
+        return $legacy !== '' ? rawurldecode($legacy) : '';
+    }
+
     public static function verifyToken(string $token, string $useridc): ?array
     {
+        $token = trim($token);
+        if ($token !== '') {
+            try {
+                $token = rawurldecode($token);
+            } catch (\Throwable) {
+                // keep raw
+            }
+        }
+
         if (! $token || ! $useridc) {
             return null;
         }
