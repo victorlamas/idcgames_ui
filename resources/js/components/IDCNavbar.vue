@@ -294,16 +294,27 @@ function resolveIdcAuthUrl() {
     }
 }
 
-const IDC_AUTH_URL = resolveIdcAuthUrl()
+/** API/login siempre same-origin (/idc-auth proxy). El .js se sirve desde auth (estático). */
+const IDC_AUTH_API_URL = resolveIdcAuthUrl()
+
+function canonicalAuthOrigin() {
+    const host = window.location.hostname.toLowerCase()
+    if (host === 'idcgames.net' || host.endsWith('.idcgames.net')) {
+        return 'https://auth.idcgames.net'
+    }
+    return 'https://auth.idcgames.com'
+}
+
+const IDC_AUTH_URL = IDC_AUTH_API_URL
 
 function loadAuthWidget() {
     if (window.IDCAuthWidget) { refreshSession(); return }
     const s = document.createElement('script')
     s.setAttribute('data-lang', locale.value)
-    s.setAttribute('data-api-base', IDC_AUTH_URL)
+    s.setAttribute('data-api-base', IDC_AUTH_API_URL)
     s.setAttribute('data-redirect', window.location.origin + '/' + locale.value)
     s.setAttribute('data-css', 'tailwind')
-    s.src = IDC_AUTH_URL + '/widget/idc-auth-widget.js'
+    s.src = canonicalAuthOrigin() + '/widget/idc-auth-widget.js'
     s.onload = () => refreshSession()
     document.head.appendChild(s)
 }

@@ -160,6 +160,12 @@ Referencia para comparar vhosts (no implica instalar de cero):
 IDC_AUTH_LARAVEL_PROXY=true
 ```
 
+El **JS del widget** se carga desde `https://auth.idcgames.com/widget/idc-auth-widget.js`
+(`data-api-base` sigue siendo el proxy `/idc-auth` del proyecto).
+
+Si **`/idc-auth/widget/...` → 404** tras v1.0.4: el vhost no hace `proxy_pass` a auth y mandaba
+`/idc-auth` a Laravel; corrige nginx o temporalmente `IDC_AUTH_LARAVEL_PROXY=true`.
+
 Si **502 en POST** con nginx ya configurado:
 
 1. **Diff mud vs support**: `proxy_pass`, `Host auth.idcgames.com`, `proxy_ssl_server_name on`.

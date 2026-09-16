@@ -2,8 +2,12 @@
 #
 # Muchos proyectos (support, mud, …) YA tienen este location en nginx.
 # Usa este fichero para COMPARAR con el vhost existente, no asumas que falta.
-# Lo crítico: proxy_set_header Host auth.idcgames.com; y que /idc-auth/
-# esté ANTES del location que manda todo a index.php (Laravel).
+# Lo crítico: proxy_pass a auth (NO try_files → index.php). Sin proxy_pass real,
+# antes “funcionaba” solo con la ruta Laravel /idc-auth; al desactivarla → 404.
+# proxy_set_header Host auth.idcgames.com; location /idc-auth/ ANTES de PHP.
+#
+# INCORRECTO (manda /idc-auth a Laravel → 404 si IDC_AUTH_LARAVEL_PROXY=false):
+#   location /idc-auth/ { try_files $uri /index.php?$query_string; }
 #
 # Install (solo si no existe): copy into the server {} block
 # BEFORE the generic PHP / try_files location.
