@@ -41,7 +41,7 @@
 
             <!-- Distribute CTA -->
             <div class="mt-6">
-                <a href="https://about.idcgames.com/distribute-your-game-with-idc-games"
+                <a href="https://admin.idcgames.com/"
                     target="_blank" rel="noopener noreferrer"
                     class="inline-block px-6 py-2.5 border border-white/30 text-xs font-bold uppercase tracking-widest text-white hover:bg-white hover:text-black transition-colors rounded-sm">
                     {{ t('footer_distribute') }}

@@ -1,6 +1,6 @@
 {
     "name": "@idcgames/ui",
-    "version": "1.0.0",
+    "version": "1.0.8",
     "description": "Shared Vue components for IDCGames Extra projects",
     "type": "module",
     "exports": {
